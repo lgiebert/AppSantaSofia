@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Cosecha</title>
+    <meta name="description" content="Aplicación para gestionar datos de cosecha offline">
+    <meta name="theme-color" content="#5D5CDE">
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <style>
+        /* Minimal styles so app is usable offline without Tailwind */
+        :root{--primary:#5D5CDE;--bg:#f8fafc;--card:#fff;--muted:#6b7280}
+        *{box-sizing:border-box}
+        body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);margin:0;color:#111;min-height:100vh;padding:12px}
+        .container{max-width:960px;margin:0 auto}
+        header{text-align:center;margin-bottom:16px}
+        h1{margin:8px 0;font-size:22px}
+        .card{background:var(--card);border-radius:8px;padding:12px;box-shadow:0 1px 4px rgba(0,0,0,0.06);margin-bottom:12px}
+        .status{display:flex;justify-content:space-between;align-items:center;padding:8px;border-radius:6px;background:#eef4ff}
+        .tabs{display:flex;border-bottom:1px solid #e5e7eb;margin-bottom:8px}
+        .tab-btn{flex:1;padding:10px;border:none;background:transparent;cursor:pointer}
+        .tab-btn.active{border-bottom:3px solid var(--primary);color:var(--primary);font-weight:600}
+        form .grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+        label{display:block;margin-bottom:6px;font-size:13px;color:var(--muted)}
+        input,select,textarea{width:100%;padding:8px;border:1px solid #d1d5db;border-radius:6px}
+        button.primary{background:var(--primary);color:white;padding:10px;border:none;border-radius:6px;cursor:pointer;width:100%}
+        .summary-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:8px}
+        .summary-grid .card{padding:8px;text-align:center}
+        #recordsList{max-height:360px;overflow:auto}
+        .record{border:1px solid #e5e7eb;padding:10px;border-radius:6px;display:flex;justify-content:space-between;margin-bottom:8px}
+        .modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5)}
+        .modal .card{max-width:420px}
+        @media (max-width:640px){ .grid{grid-template-columns:1fr} .summary-grid{grid-template-columns:repeat(2,1fr)} }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🌾 Gestión de Cosecha</h1>
+            <div class="card status">
+                <div><strong id="connectionText">Conectado</strong></div>
+                <div>Registros: <strong id="recordCount">0</strong></div>
+            </div>
+        </header>
+
+        <div class="card">
+            <div class="tabs" role="tablist">
+                <button class="tab-btn active" data-tab="registro">Registro</button>
+                <button class="tab-btn" data-tab="historial">Historial</button>
+                <button class="tab-btn" data-tab="exportar">Exportar</button>
+            </div>
+
+            <div id="tab-registro" class="tab-content">
+                <h2>Nuevo Registro de Cosecha</h2>
+                <form id="weightForm">
+                    <div class="grid">
+                        <div>
+                            <label>Fecha y Hora</label>
+                            <input type="datetime-local" id="datetime" required>
+                        </div>
+                        <div>
+                            <label>Número de Descarga</label>
+                            <input type="text" id="truckPlate" placeholder="001" required>
+                        </div>
+                        <div>
+                            <label>Lote</label>
+                            <input type="text" id="driver" placeholder="Número o nombre del lote" required>
+                        </div>
+                        <div>
+                            <label>Peso Neto (kg)</label>
+                            <input type="number" id="netWeight" placeholder="0" step="0.1" min="0" required>
+                        </div>
+                        <div>
+                            <label>Destino</label>
+                            <select id="destination" required>
+                                <option value="">Seleccionar destino</option>
+                                <option value="camion">Camión</option>
+                                <option value="silobolsa">Silobolsa</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label id="destinationDetailLabel">Detalle del Destino</label>
+                            <input type="text" id="destinationDetail" placeholder="Selecciona un destino primero" disabled required>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:8px">
+                        <label>Tipo de Grano</label>
+                        <select id="material">
+                            <option value="">Seleccionar tipo de grano</option>
+                            <option value="Soja">Soja</option>
+                            <option value="Maíz">Maíz</option>
+                            <option value="Trigo">Trigo</option>
+                            <option value="Girasol">Girasol</option>
+                            <option value="Sorgo">Sorgo</option>
+                            <option value="Cebada">Cebada</option>
+                            <option value="Otro">Otro</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-top:8px">
+                        <label>Observaciones</label>
+                        <textarea id="observations" rows="3" placeholder="Observaciones adicionales..."></textarea>
+                    </div>
+
+                    <div style="margin-top:10px">
+                        <button type="submit" class="primary">💾 Guardar Registro</button>
+                    </div>
+                </form>
+            </div>
+
+            <div id="tab-historial" class="tab-content" style="display:none">
+                <div style="display:flex;justify-content:space-between;align-items:center">
+                    <h2>Historial de Registros</h2>
+                    <div>
+                        <select id="filterGrain"><option value="">Todos los granos</option></select>
+                        <button id="clearAll" style="margin-left:6px">🗑️ Limpiar</button>
+                    </div>
+                </div>
+
+                <div class="summary-grid" style="margin-top:8px">
+                    <div class="card"><div style="font-size:12px">Total Registros</div><div id="totalRecords" style="font-weight:700">0</div></div>
+                    <div class="card"><div style="font-size:12px">Peso Total (kg)</div><div id="totalWeight" style="font-weight:700">0</div></div>
+                    <div class="card"><div style="font-size:12px">Último Registro</div><div id="lastRecord" style="font-weight:700">-</div></div>
+                    <div class="card"><div style="font-size:12px">Tipos de Grano</div><div id="grainTypes" style="font-weight:700">0</div></div>
+                </div>
+
+                <div id="recordsList" style="margin-top:8px">
+                    <div style="text-align:center;padding:28px;color:#6b7280">📝 No hay registros almacenados</div>
+                </div>
+            </div>
+
+            <div id="tab-exportar" class="tab-content" style="display:none">
+                <h2>Exportar y Sincronizar</h2>
+                <div style="margin-top:8px">
+                    <label>Formato de Exportación</label>
+                    <select id="exportFormat">
+                        <option value="excel">Excel (.xlsx)</option>
+                        <option value="csv">CSV</option>
+                        <option value="json">JSON</option>
+                    </select>
+                </div>
+
+                <div style="margin-top:8px" class="card">
+                    <div>Total de registros: <span id="exportSummaryRecords">0</span></div>
+                    <div>Peso total: <span id="exportSummaryWeight">0 kg</span></div>
+                    <div>Fecha del último registro: <span id="exportSummaryDate">-</span></div>
+                </div>
+
+                <div style="margin-top:8px">
+                    <button id="syncButton" class="primary">🚀 Generar y Descargar Planilla</button>
+                    <button id="shareButton" style="margin-top:8px">📤 Compartir Datos</button>
+                    <div id="syncStatus" style="display:none;margin-top:8px"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="confirmModal" class="modal" style="display:none">
+        <div class="card">
+            <h3>Confirmar Acción</h3>
+            <p id="confirmMessage"></p>
+            <div style="display:flex;justify-content:flex-end;gap:8px">
+                <button id="confirmCancel">Cancelar</button>
+                <button id="confirmOk" style="background:#ef4444;color:#fff;padding:8px;border-radius:6px">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+// Copié y adapté el JS original del usuario para mantener las funcionalidades
+let records = [];
+let recordIdCounter = 1;
+let deferredPrompt;
+let currentFilter = '';
+
+// Dark mode not strictly necessary; keep behavior simple
+if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    document.documentElement.style.background = '#111';
+}
+
+// PWA Installation handling (beforeinstallprompt)
+window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    // Could show a custom banner here
+});
+
+// Register service worker (already included in package)
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('service-worker.js').then(()=>console.log('SW registrado')).catch(console.error);
+}
+
+// Local Storage functions
+function saveRecords() {
+    try {
+        localStorage.setItem('cosechaRecords', JSON.stringify(records));
+        localStorage.setItem('cosechaCounter', recordIdCounter.toString());
+    } catch (e) {
+        console.error('Error saving records:', e);
+    }
+}
+
+function loadRecords() {
+    try {
+        const saved = localStorage.getItem('cosechaRecords');
+        const counter = localStorage.getItem('cosechaCounter');
+        if (saved) records = JSON.parse(saved);
+        if (counter) recordIdCounter = parseInt(counter,10);
+    } catch (e) {
+        console.error('Error loading records:', e);
+        records = [];
+        recordIdCounter = 1;
+    }
+}
+
+// Tab management
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-btn').forEach(btn=>{
+        btn.classList.remove('active');
+    });
+    document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+    document.querySelectorAll('.tab-content').forEach(c=>c.style.display='none');
+    document.getElementById('tab-'+tabName).style.display='block';
+    if (tabName === 'historial') {
+        updateSummaryCards();
+        renderRecords();
+        updateGrainFilter();
+    } else if (tabName === 'exportar') {
+        updateExportSummary();
+    }
+}
+
+// Initialize datetime
+function initDateTime() {
+    const now = new Date();
+    const localDateTime = new Date(now.getTime() - now.getTimezoneOffset()*60000).toISOString().slice(0,16);
+    document.getElementById('datetime').value = localDateTime;
+}
+
+// Connection status
+function updateConnectionStatus() {
+    const isOnline = navigator.onLine;
+    const statusText = document.getElementById('connectionText');
+    if (isOnline) statusText.textContent='Conectado'; else statusText.textContent='Sin conexión';
+}
+
+// Destination detail
+function updateDestinationDetail() {
+    const destination = document.getElementById('destination').value;
+    const detailField = document.getElementById('destinationDetail');
+    const label = document.getElementById('destinationDetailLabel');
+    if (destination === 'camion') {
+        detailField.placeholder = 'Ej: ABC123';
+        detailField.disabled = false;
+        label.textContent = 'Patente del Camión';
+    } else if (destination === 'silobolsa') {
+        detailField.placeholder = 'Ej: SB001';
+        detailField.disabled = false;
+        label.textContent = 'Número de Silobolsa';
+    } else {
+        detailField.placeholder = 'Selecciona un destino primero';
+        detailField.disabled = true;
+        detailField.value = '';
+        label.textContent = 'Detalle del Destino';
+    }
+}
+
+// Add record
+function addRecord(data) {
+    const record = { id: recordIdCounter++, timestamp: Date.now(), ...data };
+    records.push(record);
+    saveRecords();
+    updateRecordCount();
+    showStatus('✅ Registro guardado correctamente','success');
+    return record;
+}
+
+// Remove record
+function removeRecord(id) {
+    records = records.filter(record=>record.id!==id);
+    saveRecords();
+    updateRecordCount();
+    renderRecords();
+    updateSummaryCards();
+}
+
+// Update record count
+function updateRecordCount(){ document.getElementById('recordCount').textContent = records.length; }
+
+// Update summary cards
+function updateSummaryCards() {
+    const filteredRecords = currentFilter ? records.filter(record => record.material === currentFilter) : records;
+    const totalRecords = filteredRecords.length;
+    const totalWeight = filteredRecords.reduce((sum, record) => sum + (parseFloat(record.netWeight) || 0), 0);
+    const grainTypes = [...new Set(records.map(record => record.material).filter(Boolean))].length;
+    const lastRecord = records.length > 0 ? new Date(Math.max(...records.map(r => new Date(r.datetime)))).toLocaleDateString('es-ES') : '-';
+    document.getElementById('totalRecords').textContent = totalRecords;
+    document.getElementById('totalWeight').textContent = totalWeight.toLocaleString('es-ES');
+    document.getElementById('grainTypes').textContent = grainTypes;
+    document.getElementById('lastRecord').textContent = lastRecord;
+}
+
+// Update grain filter
+function updateGrainFilter() {
+    const grainTypes = [...new Set(records.map(record=>record.material).filter(Boolean))];
+    const filterSelect = document.getElementById('filterGrain');
+    filterSelect.innerHTML = '<option value="">Todos los granos</option>';
+    grainTypes.forEach(g=>{ const o = document.createElement('option'); o.value=g; o.textContent=g; filterSelect.appendChild(o); });
+}
+
+// Render records
+function renderRecords() {
+    const container = document.getElementById('recordsList');
+    const filteredRecords = currentFilter ? records.filter(record => record.material === currentFilter) : records;
+    if (filteredRecords.length === 0) {
+        container.innerHTML = `<div style="text-align:center;padding:28px;color:#6b7280">${currentFilter? `📝 No hay registros de ${currentFilter}` : '📝 No hay registros almacenados'}</div>`;
+        return;
+    }
+    const sorted = [...filteredRecords].sort((a,b)=> new Date(b.datetime)-new Date(a.datetime));
+    container.innerHTML = '';
+    sorted.forEach(record=>{
+        const el = document.createElement('div'); el.className='record';
+        el.innerHTML = `
+            <div>
+                <div style="font-weight:600">#${record.truckPlate} - ${new Date(record.datetime).toLocaleDateString('es-ES')}</div>
+                <div style="font-size:13px;color:#6b7280">${record.driver} ${record.material? '· '+record.material : ''}</div>
+                <div style="margin-top:6px">${record.observations? '<em>'+record.observations+'</em>':''}</div>
+            </div>
+            <div style="text-align:right">
+                <div style="font-weight:600">${record.netWeight} kg</div>
+                <div style="margin-top:8px"><button data-id="${record.id}" class="removeBtn">Eliminar</button></div>
+            </div>
+        `;
+        container.appendChild(el);
+    });
+    // attach delete handlers
+    document.querySelectorAll('.removeBtn').forEach(btn=> btn.addEventListener('click', (e)=>{
+        const id = parseInt(e.target.dataset.id,10);
+        removeRecord(id);
+    }));
+}
+
+// Update export summary
+function updateExportSummary() {
+    const totalWeight = records.reduce((sum, r)=> sum + (parseFloat(r.netWeight)||0),0);
+    const last = records.length > 0 ? new Date(Math.max(...records.map(r=>new Date(r.datetime)))).toLocaleDateString('es-ES') : '-';
+    document.getElementById('exportSummaryRecords').textContent = records.length;
+    document.getElementById('exportSummaryWeight').textContent = totalWeight.toLocaleString('es-ES');
+    document.getElementById('exportSummaryDate').textContent = last;
+}
+
+// Confirmation modal
+function showConfirmation(message, onConfirm) {
+    const modal = document.getElementById('confirmModal');
+    const msg = document.getElementById('confirmMessage');
+    modal.style.display = 'flex';
+    msg.textContent = message;
+    document.getElementById('confirmCancel').onclick = ()=> modal.style.display='none';
+    document.getElementById('confirmOk').onclick = ()=> { modal.style.display='none'; onConfirm(); };
+}
+
+// Show status
+function showStatus(message, type='info') {
+    const syncStatus = document.getElementById('syncStatus');
+    syncStatus.style.display='block'; syncStatus.textContent = message;
+    setTimeout(()=> syncStatus.style.display='none',4000);
+}
+
+// Share data
+async function shareData() {
+    if (records.length === 0) { showStatus('No hay registros para compartir','error'); return; }
+    const exportData = records.map(r=>({Fecha:new Date(r.datetime).toLocaleDateString('es-ES'),Hora:new Date(r.datetime).toLocaleTimeString('es-ES'),'Número de Descarga':r.truckPlate,Lote:r.driver,'Peso Neto (kg)':r.netWeight,'Tipo de Grano':r.material||'',Destino:r.destination==='camion'?'Camión':'Silobolsa','Detalle Destino':r.destinationDetail||'','Observaciones':r.observations||''}));
+    const dataStr = JSON.stringify(exportData,null,2);
+    try {
+        if (navigator.share) {
+            await navigator.share({title:'Datos de Cosecha',text:`Datos de cosecha con ${records.length} registros`,files:[new File([dataStr],'cosecha.json',{type:'application/json'})]});
+        } else {
+            await navigator.clipboard.writeText(dataStr);
+            showStatus('📋 Datos copiados al portapapeles','success');
+        }
+    } catch(e){ await navigator.clipboard.writeText(dataStr); showStatus('📋 Datos copiados al portapapeles','success'); }
+}
+
+// Export to file (CSV/JSON simple)
+function exportToSpreadsheet() {
+    if (records.length === 0) { showStatus('No hay registros para exportar','error'); return; }
+    const format = document.getElementById('exportFormat').value;
+    const exportData = records.map(r=>({Fecha:new Date(r.datetime).toLocaleDateString('es-ES'),Hora:new Date(r.datetime).toLocaleTimeString('es-ES'),'Número de Descarga':r.truckPlate,Lote:r.driver,'Peso Neto (kg)':r.netWeight,'Tipo de Grano':r.material||'',Destino:r.destination==='camion'?'Camión':'Silobolsa','Detalle Destino':r.destinationDetail||'','Observaciones':r.observations||''}));
+    if (format === 'json') {
+        const blob = new Blob([JSON.stringify(exportData,null,2)],{type:'application/json'});
+        const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`cosecha_${new Date().toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(a.href); showStatus('📁 JSON descargado','success');
+    } else if (format === 'csv' || format === 'excel') {
+        // CSV with semicolon
+        const headers = Object.keys(exportData[0]);
+        const rows = exportData.map(r=> headers.map(h=> (''+r[h]).replace(/;/g,',')).join(';'));
+        const csv = headers.join(';') + '\n' + rows.join('\n');
+        const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
+        const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`cosecha_${new Date().toISOString().split('T')[0]}.${format==='excel'?'csv':'csv'}`; a.click(); URL.revokeObjectURL(a.href); showStatus('📁 CSV descargado','success');
+    }
+}
+
+// Event listeners on DOMContentLoaded
+document.addEventListener('DOMContentLoaded', ()=>{
+    loadRecords(); initDateTime(); updateConnectionStatus(); updateRecordCount(); updateSummaryCards();
+    window.addEventListener('online', updateConnectionStatus); window.addEventListener('offline', updateConnectionStatus);
+
+    document.querySelectorAll('.tab-btn').forEach(btn=> btn.addEventListener('click', ()=> switchTab(btn.dataset.tab) ));
+    document.getElementById('destination').addEventListener('change', updateDestinationDetail);
+
+    document.getElementById('weightForm').addEventListener('submit', function(e){
+        e.preventDefault();
+        const formData = {
+            datetime: document.getElementById('datetime').value,
+            truckPlate: document.getElementById('truckPlate').value.toUpperCase(),
+            driver: document.getElementById('driver').value,
+            netWeight: parseFloat(document.getElementById('netWeight').value),
+            material: document.getElementById('material').value,
+            destination: document.getElementById('destination').value,
+            destinationDetail: document.getElementById('destinationDetail').value.toUpperCase(),
+            observations: document.getElementById('observations').value
+        };
+        addRecord(formData);
+        this.reset(); initDateTime(); switchTab('historial');
+    });
+
+    document.getElementById('filterGrain').addEventListener('change', function(e){ currentFilter = e.target.value; renderRecords(); updateSummaryCards(); });
+
+    document.getElementById('clearAll').addEventListener('click', ()=>{
+        if (records.length === 0) return;
+        showConfirmation('¿Estás seguro de que quieres eliminar todos los registros?', function(){ records=[]; saveRecords(); updateRecordCount(); renderRecords(); updateSummaryCards(); updateGrainFilter(); showStatus('🗑️ Todos los registros han sido eliminados','info'); });
+    });
+
+    document.getElementById('syncButton').addEventListener('click', exportToSpreadsheet);
+    document.getElementById('shareButton').addEventListener('click', shareData);
+});
+</script>
+</body>
+</html>
