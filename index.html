@@ -6,7 +6,10 @@
     <title>Gestión de Cosecha</title>
     <meta name="description" content="Aplicación para gestionar datos de cosecha offline">
     <meta name="theme-color" content="#5D5CDE">
-    <link rel="manifest"ink rel="apple-touch-icon" href="    /* Minimal styles so app is usable offline without Tailwind */
+    <link rel="manifest" href="manifest.json">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <style>
+        /* Minimal styles so app is usable offline without Tailwind */
         :root{--primary:#5D5CDE;--bg:#f8fafc;--card:#fff;--muted:#6b7280}
         *{box-sizing:border-box}
         body{font-family:system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;background:var(--bg);margin:0;color:#111;min-height:100vh;padding:12px}
@@ -28,9 +31,6 @@
         .record{border:1px solid #e5e7eb;padding:10px;border-radius:6px;display:flex;justify-content:space-between;margin-bottom:8px}
         .modal{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.5)}
         .modal .card{max-width:420px}
-        .inline-muted{font-size:12px;color:#6b7280}
-        .badge{display:inline-block;background:#eef2ff;color:#3730a3;font-size:12px;padding:2px 8px;border-radius:999px}
-        .row{display:flex;align-items:center;justify-content:space-between;gap:8px}
         @media (max-width:640px){ .grid{grid-template-columns:1fr} .summary-grid{grid-template-columns:repeat(2,1fr)} }
     </style>
 </head>
@@ -59,29 +59,21 @@
                             <label>Fecha y Hora</label>
                             <input type="datetime-local" id="datetime" required>
                         </div>
-
-                        <!-- Número de Descarga: ahora es autoincremental y de solo lectura -->
                         <div>
                             <label>Número de Descarga</label>
-                            <input type="text" id="truckPlate" placeholder="001" readonly>
-                            <div class="inline-muted">Se genera automáticamente</div>
+                            <input type="text" id="truckPlate" placeholder="001" required>
                         </div>
-
-                        <!-- Lote ahora es opcional -->
                         <div>
                             <label>Lote</label>
-                            <input type="text" id="driver" placeholder="Número o nombre del lote">
+                            <input type="text" id="driver" placeholder="Número o nombre del lote" required>
                         </div>
-
                         <div>
                             <label>Peso Neto (kg)</label>
                             <input type="number" id="netWeight" placeholder="0" step="0.1" min="0" required>
                         </div>
-
-                        <!-- Config de destino (se usa solo la 1ra vez que no hay default) -->
-                        <div id="destinationConfig">
+                        <div>
                             <label>Destino</label>
-                            <select id="destination">
+                            <select id="destination" required>
                                 <option value="">Seleccionar destino</option>
                                 <option value="camion">Camión</option>
                                 <option value="silobolsa">Silobolsa</option>
@@ -89,19 +81,8 @@
                         </div>
                         <div>
                             <label id="destinationDetailLabel">Detalle del Destino</label>
-                            <input type="text" id="destinationDetail" placeholder="Selecciona un destino primero" disabled>
+                            <input type="text" id="destinationDetail" placeholder="Selecciona un destino primero" disabled required>
                         </div>
-                    </div>
-
-                    <!-- Banner cuando hay destino por defecto -->
-                    <div id="defaultDestBanner" class="row" style="display:none;margin-top:8px">
-                        <div class="inline-muted">
-                            Destino por defecto:
-                            <span class="badge" id="defaultDestText">-</span>
-                            ·
-                            <strong id="defaultDestDetailText">-</strong>
-                        </div>
-                        <button type="button" id="changeDefaults">Cambiar destino</button>
                     </div>
 
                     <div style="margin-top:8px">
@@ -189,50 +170,34 @@
     </div>
 
 <script>
-// =======================
-// Estado y almacenamiento
-// =======================
+// Copié y adapté el JS original del usuario para mantener las funcionalidades
 let records = [];
-let recordIdCounter = 1; // se mantiene para id interno
+let recordIdCounter = 1;
 let deferredPrompt;
 let currentFilter = '';
 
-const LS_KEYS = {
-  records: 'cosechaRecords',
-  counter: 'cosechaCounter',
-  nextDownloadNumber: 'cosechaDownloadNumberNext', // nuevo: próximo Nº de descarga
-  defaults: 'cosechaDefaults'                      // nuevo: destino por defecto
-};
-
-const defaults = {
-  destination: null,
-  destinationDetail: null
-};
-
-// =======================
-// Preferencias & PWA
-// =======================
+// Dark mode not strictly necessary; keep behavior simple
 if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
     document.documentElement.style.background = '#111';
 }
 
+// PWA Installation handling (beforeinstallprompt)
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     deferredPrompt = e;
+    // Could show a custom banner here
 });
 
-// Service worker
+// Register service worker (already included in package)
 if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('service-worker.js').then(()=>console.log('SW registrado')).catch(console.error);
 }
 
-// =======================
-// Local Storage helpers
-// =======================
+// Local Storage functions
 function saveRecords() {
     try {
-        localStorage.setItem(LS_KEYS.records, JSON.stringify(records));
-        localStorage.setItem(LS_KEYS.counter, recordIdCounter.toString());
+        localStorage.setItem('cosechaRecords', JSON.stringify(records));
+        localStorage.setItem('cosechaCounter', recordIdCounter.toString());
     } catch (e) {
         console.error('Error saving records:', e);
     }
@@ -240,8 +205,8 @@ function saveRecords() {
 
 function loadRecords() {
     try {
-        const saved = localStorage.getItem(LS_KEYS.records);
-        const counter = localStorage.getItem(LS_KEYS.counter);
+        const saved = localStorage.getItem('cosechaRecords');
+        const counter = localStorage.getItem('cosechaCounter');
         if (saved) records = JSON.parse(saved);
         if (counter) recordIdCounter = parseInt(counter,10);
     } catch (e) {
@@ -251,24 +216,7 @@ function loadRecords() {
     }
 }
 
-function saveDefaults() {
-    localStorage.setItem(LS_KEYS.defaults, JSON.stringify(defaults));
-}
-
-function loadDefaults() {
-    const v = localStorage.getItem(LS_KEYS.defaults);
-    if (v) {
-        try {
-            const obj = JSON.parse(v);
-            defaults.destination = obj.destination || null;
-            defaults.destinationDetail = obj.destinationDetail || null;
-        } catch { /* ignore */ }
-    }
-}
-
-// ===============
-// UI helpers
-// ===============
+// Tab management
 function switchTab(tabName) {
     document.querySelectorAll('.tab-btn').forEach(btn=>{
         btn.classList.remove('active');
@@ -285,70 +233,21 @@ function switchTab(tabName) {
     }
 }
 
+// Initialize datetime
 function initDateTime() {
     const now = new Date();
     const localDateTime = new Date(now.getTime() - now.getTimezoneOffset()*60000).toISOString().slice(0,16);
     document.getElementById('datetime').value = localDateTime;
 }
 
+// Connection status
 function updateConnectionStatus() {
     const isOnline = navigator.onLine;
     const statusText = document.getElementById('connectionText');
     if (isOnline) statusText.textContent='Conectado'; else statusText.textContent='Sin conexión';
 }
 
-function showStatus(message, type='info') {
-    const syncStatus = document.getElementById('syncStatus');
-    syncStatus.style.display='block'; syncStatus.textContent = message;
-    setTimeout(()=> syncStatus.style.display='none', 4000);
-}
-
-// ==============================
-// Autonumeración de la descarga
-// ==============================
-function computeNextNumberFromExisting() {
-    // Busca el máximo 'truckPlate' numérico ya guardado, si es posible
-    const nums = (records || [])
-      .map(r => (r && r.truckPlate) ? parseInt(String(r.truckPlate), 10) : NaN)
-      .filter(n => Number.isFinite(n));
-    if (nums.length === 0) return 1;
-    return Math.max(...nums) + 1;
-}
-
-function getNextDownloadNumber() {
-    const raw = localStorage.getItem(LS_KEYS.nextDownloadNumber);
-    if (!raw) {
-        const next = computeNextNumberFromExisting();
-        localStorage.setItem(LS_KEYS.nextDownloadNumber, String(next));
-        return next;
-    }
-    const n = parseInt(raw,10);
-    if (!Number.isFinite(n) || n < 1) {
-        const next = computeNextNumberFromExisting();
-        localStorage.setItem(LS_KEYS.nextDownloadNumber, String(next));
-        return next;
-    }
-    return n;
-}
-
-function setNextDownloadNumber(n) {
-    localStorage.setItem(LS_KEYS.nextDownloadNumber, String(n));
-}
-
-function pad3(n) {
-    return String(n).padStart(3, '0');
-}
-
-function updateTruckPlateField() {
-    const next = getNextDownloadNumber();
-    const el = document.getElementById('truckPlate');
-    el.value = pad3(next);
-    el.readOnly = true;
-}
-
-// =====================================
-// Destino por defecto (set & visual UI)
-// =====================================
+// Destination detail
 function updateDestinationDetail() {
     const destination = document.getElementById('destination').value;
     const detailField = document.getElementById('destinationDetail');
@@ -364,49 +263,12 @@ function updateDestinationDetail() {
     } else {
         detailField.placeholder = 'Selecciona un destino primero';
         detailField.disabled = true;
+        detailField.value = '';
         label.textContent = 'Detalle del Destino';
     }
 }
 
-function hydrateDefaultsUI() {
-    const banner = document.getElementById('defaultDestBanner');
-    const destText = document.getElementById('defaultDestText');
-    const destDetailText = document.getElementById('defaultDestDetailText');
-
-    const destSel = document.getElementById('destination');
-    const destDet = document.getElementById('destinationDetail');
-
-    if (defaults.destination && defaults.destinationDetail) {
-        // Mostrar banner y bloquear campos
-        banner.style.display = 'flex';
-        const destLabel = defaults.destination === 'camion' ? 'Camión' : 'Silobolsa';
-        destText.textContent = destLabel;
-        destDetailText.textContent = defaults.destinationDetail;
-
-        destSel.value = defaults.destination;
-        destDet.value = defaults.destinationDetail;
-        destSel.disabled = true;
-        destDet.disabled = true;
-    } else {
-        // Sin defaults: ocultar banner y permitir configurar
-        banner.style.display = 'none';
-        destSel.disabled = false;
-        destDet.disabled = (destSel.value === '');
-        updateDestinationDetail();
-    }
-}
-
-function clearDefaults() {
-    defaults.destination = null;
-    defaults.destinationDetail = null;
-    saveDefaults();
-    hydrateDefaultsUI();
-    showStatus('Destino por defecto eliminado. Configurá uno nuevo.', 'info');
-}
-
-// ===============
-// CRUD Registros
-// ===============
+// Add record
 function addRecord(data) {
     const record = { id: recordIdCounter++, timestamp: Date.now(), ...data };
     records.push(record);
@@ -416,6 +278,7 @@ function addRecord(data) {
     return record;
 }
 
+// Remove record
 function removeRecord(id) {
     records = records.filter(record=>record.id!==id);
     saveRecords();
@@ -424,8 +287,10 @@ function removeRecord(id) {
     updateSummaryCards();
 }
 
+// Update record count
 function updateRecordCount(){ document.getElementById('recordCount').textContent = records.length; }
 
+// Update summary cards
 function updateSummaryCards() {
     const filteredRecords = currentFilter ? records.filter(record => record.material === currentFilter) : records;
     const totalRecords = filteredRecords.length;
@@ -438,6 +303,7 @@ function updateSummaryCards() {
     document.getElementById('lastRecord').textContent = lastRecord;
 }
 
+// Update grain filter
 function updateGrainFilter() {
     const grainTypes = [...new Set(records.map(record=>record.material).filter(Boolean))];
     const filterSelect = document.getElementById('filterGrain');
@@ -445,6 +311,7 @@ function updateGrainFilter() {
     grainTypes.forEach(g=>{ const o = document.createElement('option'); o.value=g; o.textContent=g; filterSelect.appendChild(o); });
 }
 
+// Render records
 function renderRecords() {
     const container = document.getElementById('recordsList');
     const filteredRecords = currentFilter ? records.filter(record => record.material === currentFilter) : records;
@@ -459,7 +326,7 @@ function renderRecords() {
         el.innerHTML = `
             <div>
                 <div style="font-weight:600">#${record.truckPlate} - ${new Date(record.datetime).toLocaleDateString('es-ES')}</div>
-                <div style="font-size:13px;color:#6b7280">${record.driver || ''} ${record.material? '· '+record.material : ''}</div>
+                <div style="font-size:13px;color:#6b7280">${record.driver} ${record.material? '· '+record.material : ''}</div>
                 <div style="margin-top:6px">${record.observations? '<em>'+record.observations+'</em>':''}</div>
             </div>
             <div style="text-align:right">
@@ -476,6 +343,7 @@ function renderRecords() {
     }));
 }
 
+// Update export summary
 function updateExportSummary() {
     const totalWeight = records.reduce((sum, r)=> sum + (parseFloat(r.netWeight)||0),0);
     const last = records.length > 0 ? new Date(Math.max(...records.map(r=>new Date(r.datetime)))).toLocaleDateString('es-ES') : '-';
@@ -484,21 +352,24 @@ function updateExportSummary() {
     document.getElementById('exportSummaryDate').textContent = last;
 }
 
-// ===================
-// Confirmación modal
-// ===================
+// Confirmation modal
 function showConfirmation(message, onConfirm) {
     const modal = document.getElementById('confirmModal');
     const msg = document.getElementById('confirmMessage');
     modal.style.display = 'flex';
     msg.textContent = message;
     document.getElementById('confirmCancel').onclick = ()=> modal.style.display='none';
-    document.getElementById('confirmOk').onclick = () => { modal.style.display='none'; onConfirm(); };
+    document.getElementById('confirmOk').onclick = ()=> { modal.style.display='none'; onConfirm(); };
 }
 
-// ================
-// Compartir/Export
-// ================
+// Show status
+function showStatus(message, type='info') {
+    const syncStatus = document.getElementById('syncStatus');
+    syncStatus.style.display='block'; syncStatus.textContent = message;
+    setTimeout(()=> syncStatus.style.display='none',4000);
+}
+
+// Share data
 async function shareData() {
     if (records.length === 0) { showStatus('No hay registros para compartir','error'); return; }
     const exportData = records.map(r=>({Fecha:new Date(r.datetime).toLocaleDateString('es-ES'),Hora:new Date(r.datetime).toLocaleTimeString('es-ES'),'Número de Descarga':r.truckPlate,Lote:r.driver,'Peso Neto (kg)':r.netWeight,'Tipo de Grano':r.material||'',Destino:r.destination==='camion'?'Camión':'Silobolsa','Detalle Destino':r.destinationDetail||'','Observaciones':r.observations||''}));
@@ -513,6 +384,7 @@ async function shareData() {
     } catch(e){ await navigator.clipboard.writeText(dataStr); showStatus('📋 Datos copiados al portapapeles','success'); }
 }
 
+// Export to file (CSV/JSON simple)
 function exportToSpreadsheet() {
     if (records.length === 0) { showStatus('No hay registros para exportar','error'); return; }
     const format = document.getElementById('exportFormat').value;
@@ -521,105 +393,44 @@ function exportToSpreadsheet() {
         const blob = new Blob([JSON.stringify(exportData,null,2)],{type:'application/json'});
         const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`cosecha_${new Date().toISOString().split('T')[0]}.json`; a.click(); URL.revokeObjectURL(a.href); showStatus('📁 JSON descargado','success');
     } else if (format === 'csv' || format === 'excel') {
-        // CSV con punto y coma
+        // CSV with semicolon
         const headers = Object.keys(exportData[0]);
         const rows = exportData.map(r=> headers.map(h=> (''+r[h]).replace(/;/g,',')).join(';'));
         const csv = headers.join(';') + '\n' + rows.join('\n');
         const blob = new Blob([csv],{type:'text/csv;charset=utf-8;'});
-        const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`cosecha_${new Date().toISOString().split('T')[0]}.csv`; a.click(); URL.revokeObjectURL(a.href); showStatus('📁 CSV descargado','success');
+        const a = document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`cosecha_${new Date().toISOString().split('T')[0]}.${format==='excel'?'csv':'csv'}`; a.click(); URL.revokeObjectURL(a.href); showStatus('📁 CSV descargado','success');
     }
 }
 
-// =============================
-// Inicialización y Listeners
-// =============================
+// Event listeners on DOMContentLoaded
 document.addEventListener('DOMContentLoaded', ()=>{
-    loadRecords();
-    loadDefaults();
-    initDateTime();
-    updateConnectionStatus();
-    updateRecordCount();
-    updateSummaryCards();
-    updateTruckPlateField();
-    hydrateDefaultsUI();
-
-    window.addEventListener('online', updateConnectionStatus);
-    window.addEventListener('offline', updateConnectionStatus);
+    loadRecords(); initDateTime(); updateConnectionStatus(); updateRecordCount(); updateSummaryCards();
+    window.addEventListener('online', updateConnectionStatus); window.addEventListener('offline', updateConnectionStatus);
 
     document.querySelectorAll('.tab-btn').forEach(btn=> btn.addEventListener('click', ()=> switchTab(btn.dataset.tab) ));
     document.getElementById('destination').addEventListener('change', updateDestinationDetail);
-    document.getElementById('changeDefaults').addEventListener('click', clearDefaults);
 
     document.getElementById('weightForm').addEventListener('submit', function(e){
         e.preventDefault();
-
-        // Sólo exigimos netWeight. Si no hay defaults, pedimos destino/detalle la primera vez.
-        const netWeightVal = parseFloat(document.getElementById('netWeight').value);
-        if (!Number.isFinite(netWeightVal) || netWeightVal <= 0) {
-            showStatus('Ingresá un peso neto válido.','error'); return;
-        }
-
-        let destinationVal = defaults.destination;
-        let destinationDetailVal = defaults.destinationDetail;
-
-        if (!destinationVal || !destinationDetailVal) {
-            // Primera vez: tomar del formulario
-            const destSel = document.getElementById('destination').value;
-            const destDet = document.getElementById('destinationDetail').value.trim();
-            if (!destSel || !destDet) {
-                showStatus('Seleccioná un destino y completá la patente/N° de silobolsa la primera vez.','error');
-                return;
-            }
-            destinationVal = destSel;
-            destinationDetailVal = destDet.toUpperCase();
-
-            // Guardar como defaults para futuros registros
-            defaults.destination = destinationVal;
-            defaults.destinationDetail = destinationDetailVal;
-            saveDefaults();
-            hydrateDefaultsUI();
-        }
-
-        // Autonúmero ya en el input, luego incrementamos para el próximo
-        const currentDownloadNumber = document.getElementById('truckPlate').value;
-
         const formData = {
             datetime: document.getElementById('datetime').value,
-            truckPlate: currentDownloadNumber, // ahora es "Número de Descarga" autoincremental
-            driver: document.getElementById('driver').value, // opcional
-            netWeight: netWeightVal,
-            material: document.getElementById('material').value, // opcional
-            destination: destinationVal,
-            destinationDetail: destinationDetailVal,
+            truckPlate: document.getElementById('truckPlate').value.toUpperCase(),
+            driver: document.getElementById('driver').value,
+            netWeight: parseFloat(document.getElementById('netWeight').value),
+            material: document.getElementById('material').value,
+            destination: document.getElementById('destination').value,
+            destinationDetail: document.getElementById('destinationDetail').value.toUpperCase(),
             observations: document.getElementById('observations').value
         };
-
         addRecord(formData);
-
-        // Incrementar para el próximo registro
-        const next = getNextDownloadNumber() + 1;
-        setNextDownloadNumber(next);
-        updateTruckPlateField();
-
-        // Reset mínimos: sólo limpiar netWeight, mantener fecha actualizada
-        this.reset();
-        initDateTime();
-        hydrateDefaultsUI(); // mantiene destino bloqueado si hay default
-
-        // Ir a historial para ver resultado
-        switchTab('historial');
+        this.reset(); initDateTime(); switchTab('historial');
     });
 
-    document.getElementById('filterGrain').addEventListener('change', function(e){
-        currentFilter = e.target.value; renderRecords(); updateSummaryCards();
-    });
+    document.getElementById('filterGrain').addEventListener('change', function(e){ currentFilter = e.target.value; renderRecords(); updateSummaryCards(); });
 
     document.getElementById('clearAll').addEventListener('click', ()=>{
         if (records.length === 0) return;
-        showConfirmation('¿Estás seguro de que quieres eliminar todos los registros?', function(){
-            records=[]; saveRecords(); updateRecordCount(); renderRecords(); updateSummaryCards(); updateGrainFilter();
-            showStatus('🗑️ Todos los registros han sido eliminados','info');
-        });
+        showConfirmation('¿Estás seguro de que quieres eliminar todos los registros?', function(){ records=[]; saveRecords(); updateRecordCount(); renderRecords(); updateSummaryCards(); updateGrainFilter(); showStatus('🗑️ Todos los registros han sido eliminados','info'); });
     });
 
     document.getElementById('syncButton').addEventListener('click', exportToSpreadsheet);
